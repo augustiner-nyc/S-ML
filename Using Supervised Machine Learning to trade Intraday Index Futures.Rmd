@@ -36,8 +36,8 @@ log_print("Load Data... ")
 
 ```{r}
 # Data Exploration ---
-cor = cor(data[,c(2:6)])
-cor
+corr = cor(data[,c(2:6)])
+corr
 log_print("Data Exploration... ")
 ```
 
