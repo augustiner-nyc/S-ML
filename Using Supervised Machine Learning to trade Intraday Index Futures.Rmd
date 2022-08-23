@@ -1,5 +1,5 @@
 ---
-title: "Final Project"
+title: "ML Futures Trading"
 output:
   pdf_document: default
   html_document: default
@@ -28,7 +28,7 @@ log_print("loaded library... ")
 
 ```{r}
 # Data ---
-setwd("C:/Users/mhube/OneDrive/Desktop/HU/ANLY 530 - ML/Final Project[v6]")
+setwd("X")
 data = read_csv("data/ES_1min_vol.csv")
 log_print("Load Data... ")
 
