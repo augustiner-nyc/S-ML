@@ -1,0 +1,235 @@
+---
+title: "Final Project"
+output:
+  pdf_document: default
+  html_document: default
+date: '2022-08-09'
+---
+```{r}
+#Library ---
+library(quantmod)
+library(readr)
+library(mice)
+library(magrittr)
+library(caret)
+library(TTR)
+library(corrplot)
+library(logr)
+library(FRAPO)
+library(kernlab)
+library(logr)
+library(C50)
+library(gmodels)
+library(randomForest)
+library(rattle)
+library(naivebayes)
+log_print("loaded library... ")
+```
+
+```{r}
+# Data ---
+setwd("C:/Users/mhube/OneDrive/Desktop/HU/ANLY 530 - ML/Final Project[v6]")
+data = read_csv("data/ES_1min_vol.csv")
+log_print("Load Data... ")
+
+```
+
+```{r}
+# Data Exploration ---
+cor = cor(data[,c(2:6)])
+cor
+log_print("Data Exploration... ")
+```
+
+```{r}
+# Add Chalkin Money Flow
+mf = CMF(data[,c(3:5)],data[,6], n = 20)
+data = data.frame(mf, data[,c(2:6)])
+head(data)
+log_print("added Chalkin Money Flow... ")
+```
+
+```{r}
+# Preprocess Data ----
+# Remove NA's
+remove = 1:19
+data = data[-remove,]
+write.csv(data, "data/processed.csv")
+log_print("Save preprocessed data... ")
+str(data)
+```
+
+```{r}
+# Profit/Loss if MF Buy/Sell
+data$action = "Neutral"
+data$profit = 0
+head(data)
+
+for(i in 1:13359) {
+if(data$mf[i] >= 0.25) {
+data$action[i] = "Buy"}
+}
+
+for(i in 1:13359) {
+if(data$mf[i] <= -0.25) {
+data$action[i] = "Sell"}
+}
+
+for(i in 1:13359) {
+if(data$action[i] == "Buy") {
+data$profit[i] = data$profit[i-1]+(data$Close[i]-data$Open[i])}
+}
+
+for(i in 1:13359) {
+if(data$action[i] == "Sell") {
+data$profit[i] = data$profit[i-1]+(data$Open[i]-data$Close[i])}
+}
+
+write.csv(data, "data/targetProfitMF.csv")
+log_print("create features in data... ")
+```
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+```{r}
+# Seperate Data
+training = data[1:10702,]
+testing = data[10702:13378,]
+head(training)
+head(testing)
+log_print("split data... ")
+```
+
+# Decision Tree----
+```{r}
+# Data
+t2 = training[complete.cases(training),]
+testing2 = testing[complete.cases(testing),]
+control = trainControl(method="cv", number=10)
+metric = "Accuracy"
+
+# Train the model rpart2
+fit.rpart2 = train(action~., data = t2, method="rpart2", metric=metric, trControl=control)
+fit.rpart2
+summary(fit.rpart2$finalModel)
+
+# Visualization
+fancyRpartPlot(fit.rpart2$finalModel)
+log_print("train/test decision tree buy ... ")
+
+# Create Prediction DT
+data.pred = predict(fit.rpart2, newdata = testing2)
+table(data.pred, testing2$action)
+
+#Check Error Rate
+error.rate = round(mean(data.pred != testing2$action,2))
+error.rate
+
+# Accuracy (?)
+(p = table(data.pred, testing2$action))
+(Accuracy = sum(diag(p))/sum(p)*100)
+```
+
+# Decision Tree w/0 profit----
+```{r}
+# Data
+t2 = training[complete.cases(training),]
+testing2 = testing[complete.cases(testing),]
+control = trainControl(method="cv", number=10)
+metric = "Accuracy"
+
+#Reducin Profit
+t2 = t2[-8]
+testing2 = testing2[-8]
+
+# Train the model rpart2
+fit.rpart2 = train(action~., data = t2, method="rpart2", metric=metric, trControl=control)
+fit.rpart2
+summary(fit.rpart2$finalModel)
+
+# Visualization
+fancyRpartPlot(fit.rpart2$finalModel)
+log_print("train/test decision tree buy ... ")
+
+# Create Prediction DT
+data.pred = predict(fit.rpart2, newdata = testing2)
+table(data.pred, testing2$action)
+
+#Check Error Rate
+error.rate = round(mean(data.pred != testing2$action,2))
+error.rate
+
+# Accuracy (?)
+(p = table(data.pred, testing2$action))
+(Accuracy = sum(diag(p))/sum(p)*100)
+```
+
+
+```{r}
+#Random Forest
+t2 = training[complete.cases(training),]
+testing2 = testing[complete.cases(testing),]
+
+t2$profit = as.factor(t2$profit)
+random_model = randomForest(profit ~ ., data = t2)
+summary(random_model)
+
+
+# Random Forest Eval
+prof_pred = predict(random_model, testing2)
+
+(p = table(prof_pred, testing2$profit))
+(Accuracy = sum(diag(p))/sum(p)*100)
+```
+
+# Naive Bayes Model ---
+```{r}
+naive_model = naive_bayes(profit ~., data=t2)
+naive_model
+```
+
+# Naive Model Eval ---
+```{r}
+(conf_nat = table(predict(naive_model, testing2), testing2$profit))
+(accuracy = sum(diag(conf_nat))/sum(conf_nat)*100)
+
+
+filteredTestPred = predict(naive_model, newdata=testing2)
+p = table(filteredTestPred, testing2$profit)
+(Accuracy = sum(diag(p))/sum(p)*100)
+```
+
+# Support Vector Machines ---
+```{r}
+t2$profit = as.factor(t2$profit)
+testing2$profit = as.factor(testing2$profit)
+profit_classifier = ksvm(profit ~ ., data = t2)
+summary(profit_classifier)
+```
+
+# SVM Model Eval ---
+```{r}
+profit_predictions = predict(profit_classifier, testing2)
+(p = table(profit_predictions, testing2$profit))
+(Accuracy = sum(diag(p))/sum(p)*100)
+```
+
+# Support Vector Machines for actions ---
+```{r}
+t2$action = as.factor(t2$action)
+testing2$action = as.factor(testing2$action)
+profit_classifier = ksvm(action ~ ., data = t2)
+summary(profit_classifier)
+```
+
+# SVM Model Eval ---
+```{r}
+(p = table(profit_predictions, testing2$action))
+(Accuracy = sum(diag(p))/sum(p)*100)
+```
+
+# Overall Model Eval
+
+```{r}
+
+```
